@@ -3,8 +3,13 @@ package database
 import groovy.sql.Sql
 import groovy.util.logging.Slf4j
 
+import java.time.LocalDate
+
 @Slf4j
 class WebUser {
+    private static final  List<String> STANDARD_ROLES = ['100', '202', '962']
+
+    private static final String WEB_USER_CASELOAD = 'NWEB'
 
     private Sql sql
     private SqlHelper sqlHelper
@@ -14,195 +19,302 @@ class WebUser {
         this.sqlHelper = new SqlHelper(sql)
     }
 
-    void installPackage() {
-        sql.execute('''
-CREATE OR REPLACE PACKAGE web_user_pkg IS
-
-  TYPE caseloadType IS TABLE OF VARCHAR2(50) INDEX BY BINARY_INTEGER;
-  TYPE roleType IS TABLE OF VARCHAR2(50) INDEX BY BINARY_INTEGER;
-
-  PROCEDURE create_elite2_web_user (
-    username IN STAFF_USER_ACCOUNTS.USERNAME%TYPE,
-    password IN VARCHAR2,
-    firstname IN STAFF_MEMBERS.FIRST_NAME%TYPE,
-    lastname IN STAFF_MEMBERS.LAST_NAME%TYPE,
-    emailAddress IN INTERNET_ADDRESSES.INTERNET_ADDRESS%TYPE,
-    caseloadIds IN caseloadType,
-    roles IN roleType);
-
-END web_user_pkg;
-''')
-
-        sql.execute('''
-CREATE OR REPLACE PACKAGE BODY web_user_pkg IS
-
-  PROCEDURE create_elite2_web_user (
-    username IN STAFF_USER_ACCOUNTS.USERNAME%TYPE,
-    password IN VARCHAR2,
-    firstname IN STAFF_MEMBERS.FIRST_NAME%TYPE,
-    lastname IN STAFF_MEMBERS.LAST_NAME%TYPE,
-    emailAddress IN INTERNET_ADDRESSES.INTERNET_ADDRESS%TYPE,
-    caseloadIds IN caseloadType,
-    roles IN roleType)
-  IS
-    staffId STAFF_USER_ACCOUNTS.STAFF_ID%TYPE;
-    internetAddressId INTERNET_ADDRESSES.INTERNET_ADDRESS_ID%TYPE;
-    roleId OMS_ROLES.ROLE_ID%TYPE;
-    usernameCaps VARCHAR2(50);
-    any_rows_found number;
-    userexist integer;
-    numRoles integer;
-    standardRoles roleType;
-    BEGIN
-      usernameCaps := UPPER(username);
-
-       select count(*) into userexist from dba_users where username = usernameCaps;
-      if (userexist = 0) then
-        EXECUTE IMMEDIATE 'CREATE USER ' || usernameCaps || ' IDENTIFIED BY ' || password;
-      end if;
-
-      EXECUTE IMMEDIATE 'ALTER USER '|| usernameCaps || ' GRANT CONNECT THROUGH API_PROXY_USER';
-      EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO '|| usernameCaps;
-      EXECUTE IMMEDIATE 'GRANT TAG_USER TO '|| usernameCaps;
-      EXECUTE IMMEDIATE 'ALTER USER '|| usernameCaps || ' DEFAULT ROLE TAG_USER';
-      EXECUTE IMMEDIATE 'ALTER USER '|| usernameCaps || ' PROFILE TAG_GENERAL';
-      EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO '|| usernameCaps;
-      EXECUTE IMMEDIATE 'GRANT TAG_USER TO '|| usernameCaps;
-      EXECUTE IMMEDIATE 'GRANT TAG_RO TO '|| usernameCaps;
-      EXECUTE IMMEDIATE 'GRANT CONNECT TO '|| usernameCaps ;
-      EXECUTE IMMEDIATE 'ALTER USER '|| usernameCaps || ' DEFAULT ROLE TAG_RO';
-
-      select count(*) into any_rows_found from STAFF_USER_ACCOUNTS WHERE USERNAME = usernameCaps;
-
-      if any_rows_found = 0 then
-
-        SELECT STAFF_ID.NEXTVAL INTO staffId FROM DUAL;
-        INSERT INTO STAFF_MEMBERS (STAFF_ID, LAST_NAME, FIRST_NAME, BIRTHDATE,
-                                   UPDATE_ALLOWED_FLAG, SUSPENDED_FLAG, AS_OF_DATE,
-                                   ROLE, SEX_CODE, STATUS, SUSPENSION_DATE, SUSPENSION_REASON, FORCE_PASSWORD_CHANGE_FLAG,
-                                   LAST_PASSWORD_CHANGE_DATE, LICENSE_CODE, LICENSE_EXPIRY_DATE, CREATE_DATETIME,
-                                   CREATE_USER_ID, MODIFY_DATETIME, MODIFY_USER_ID, TITLE, NAME_SEQUENCE, QUEUE_CLUSTER_ID,
-                                   AUDIT_TIMESTAMP, AUDIT_USER_ID, AUDIT_MODULE_NAME, AUDIT_CLIENT_USER_ID,
-                                   AUDIT_CLIENT_IP_ADDRESS, AUDIT_CLIENT_WORKSTATION_NAME, AUDIT_ADDITIONAL_INFO,
-                                   FIRST_LOGON_FLAG, SIGNIFICANT_DATE, SIGNIFICANT_NAME, NATIONAL_INSURANCE_NUMBER)
-        VALUES (staffId, UPPER(lastname), UPPER(firstname),
-                         TO_DATE('1970-01-01 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Y', 'N',
-                         sysdate, NULL, 'M', 'ACTIVE', NULL, 'CA', 'N', NULL, NULL, NULL,
-                         sysdate, 'SYSCON_ADM', sysdate, 'OMS_OWNER', NULL, NULL, 2,
-                        sysdate, 'OMS_OWNER', 'JDBC Thin Client', 'mick', '10.200.3.14', 'unknown', NULL, 'N', NULL, NULL, NULL);
-
-        SELECT INTERNET_ADDRESS_ID.NEXTVAL INTO internetAddressId FROM DUAL;
-
-        INSERT INTO INTERNET_ADDRESSES (INTERNET_ADDRESS_ID, OWNER_ID, OWNER_CLASS, INTERNET_ADDRESS_CLASS, INTERNET_ADDRESS)
-        VALUES (internetAddressId, staffId, 'STF', 'EMAIL', emailAddress);
-
-        INSERT INTO STAFF_USER_ACCOUNTS (USERNAME, STAFF_ID, STAFF_USER_TYPE, ID_SOURCE, WORKING_CASELOAD_ID, CREATE_DATETIME,
-                                         CREATE_USER_ID, MODIFY_DATETIME, MODIFY_USER_ID, AUDIT_TIMESTAMP,
-                                         AUDIT_USER_ID, AUDIT_MODULE_NAME, AUDIT_CLIENT_USER_ID, AUDIT_CLIENT_IP_ADDRESS,
-                                         AUDIT_CLIENT_WORKSTATION_NAME, AUDIT_ADDITIONAL_INFO)
-        VALUES (usernameCaps, staffId, 'GENERAL', 'USER', caseloadIds(1), sysdate, 'SYSCON_ADM', sysdate, usernameCaps,
-                sysdate, usernameCaps, 'frmweb@weblg01.syscon.ca (TNS V1-V3)', 'skadubur', '10.200.2.11', 'SVAGGA-E4310', NULL);
-      END IF;
-
-      standardRoles(1) := 202;
-      standardRoles(2) := 962;
-      standardRoles(3) := 100;
-
-      FOR i IN 1..caseloadIds.count LOOP
-
-        select count(*) into any_rows_found from USER_ACCESSIBLE_CASELOADS WHERE USERNAME = usernameCaps AND CASELOAD_ID = caseloadIds(i);
-        if any_rows_found = 0 then
-          INSERT INTO USER_ACCESSIBLE_CASELOADS (CASELOAD_ID, USERNAME, START_DATE, CREATE_DATETIME, CREATE_USER_ID, MODIFY_DATETIME, MODIFY_USER_ID, AUDIT_TIMESTAMP, AUDIT_USER_ID, AUDIT_MODULE_NAME,
-                                                 AUDIT_CLIENT_USER_ID, AUDIT_CLIENT_IP_ADDRESS, AUDIT_CLIENT_WORKSTATION_NAME)
-          VALUES (caseloadIds(i), usernameCaps, sysdate, sysdate, 'SYSCON_ADM', NULL, NULL, sysdate, 'SYSCON_ADM', 'OUUUSERS', 'JHickinbotham', '10.200.1.42', 'Sheffield');
-        END IF;
-
-        FOR j IN 1..standardRoles.count LOOP
-          select ROLE_ID into roleId from OMS_ROLES WHERE ROLE_CODE = standardRoles(j);
-
-          select count(*) into any_rows_found from USER_CASELOAD_ROLES WHERE ROLE_ID = roleId AND USERNAME = usernameCaps AND CASELOAD_ID = caseloadIds(i);
-          if any_rows_found = 0 then
-            INSERT INTO USER_CASELOAD_ROLES (ROLE_ID, USERNAME, CASELOAD_ID, CREATE_DATETIME, CREATE_USER_ID,
-                                             MODIFY_DATETIME, MODIFY_USER_ID, AUDIT_TIMESTAMP, AUDIT_USER_ID, AUDIT_MODULE_NAME,
-                                             AUDIT_CLIENT_USER_ID, AUDIT_CLIENT_IP_ADDRESS, AUDIT_CLIENT_WORKSTATION_NAME )
-            VALUES (roleId, usernameCaps, caseloadIds(i), sysdate, 'SYSCON_ADM', NULL, NULL,  sysdate, 'SYSCON_ADM', 'OUUUSERS', 'TRichardson', '10.200.3.3', 'trevlt');
-          END IF;
-        END LOOP;
-
-        FOR j IN 1..roles.count LOOP
-          select ROLE_ID into roleId from OMS_ROLES WHERE ROLE_CODE = roles(j);
-
-          select count(*) into any_rows_found from USER_CASELOAD_ROLES WHERE ROLE_ID = roleId AND USERNAME = usernameCaps AND CASELOAD_ID = caseloadIds(i);
-          if any_rows_found = 0 then
-            INSERT INTO USER_CASELOAD_ROLES (ROLE_ID, USERNAME, CASELOAD_ID, CREATE_DATETIME, CREATE_USER_ID,
-                                             MODIFY_DATETIME, MODIFY_USER_ID, AUDIT_TIMESTAMP, AUDIT_USER_ID, AUDIT_MODULE_NAME,
-                                             AUDIT_CLIENT_USER_ID, AUDIT_CLIENT_IP_ADDRESS, AUDIT_CLIENT_WORKSTATION_NAME )
-            VALUES (roleId, usernameCaps, caseloadIds(i), sysdate, 'SYSCON_ADM', NULL, NULL,  sysdate, 'SYSCON_ADM', 'OUUUSERS', 'TRichardson', '10.200.3.3', 'trevlt');
-          END IF;
-        END LOOP;
-      END LOOP;
-
-    END create_elite2_web_user;
-END web_user_pkg;
-        ''')
+    /**
+     *
+     * @param username the Oracle and Nomis username
+     * @param password
+     * @param firstName
+     * @param lastName
+     * @param emailAddress
+     * @param caseloadIds List of caseLoad Ids, First entry is the working caseload
+     * @param roleCode The role to be assigned to the user.
+     */
+    void ensureWebUser(String username, String password, String firstName, String lastName, String emailAddress, List<String> caseloadIds, String roleCode) {
+        sql.withTransaction {
+            ensureOracleUser(username, password)
+            ensureStaffAccount(username, firstName, lastName, emailAddress, caseloadIds[0])
+            ensureUserCaseloadRoles(username, caseloadIds)
+            ensureUserAccessibleCaseload(username, WEB_USER_CASELOAD)
+            ensureUserCaseloadRole(username, WEB_USER_CASELOAD, roleCode)
+        }
     }
 
-    //TODO: Haven't worked out how to call this stored prodeure.  Difficulty is passing in the last two parameters.
-    // These are defined as:
-    //    TYPE caseloadType IS TABLE OF VARCHAR2(50) INDEX BY BINARY_INTEGER;
-    //    TYPE roleType IS TABLE OF VARCHAR2(50) INDEX BY BINARY_INTEGER;
-    // Need to read the Oracle JDBC docs...
 
-//    void createUser(String username, String password, String firstName, String lastName, String emailAddress, List caseloadIds, List roles) {
-//        sql.cacheConnection { Connection con ->
-    /*
-    createArrayOf isn't supported by the driver. Hmmm.
-     */
-//            def caseloadArray = con.createArrayOf('string', caseloadIds as String[])
-//            def rolesArray = con.createArrayOf('string', roles as String[])
-//            sql.call('{call web_user_pkg.create_elite2_web_user(?,?,?,?,?,?,?)}',
-//                    [username, password, firstName, lastName, emailAddress, ARRAY(caseloadArray), ARRAY(rolesArray)])
-//        }
-//    }
+    void ensureOracleUser(String username, String password) {
+        if (! userExists(username)) {
+            log.info "Create User ${username}"
+            sql.execute "CREATE USER ${username} IDENTIFIED BY ${password}".toString()
+        }
 
-    /**
-     * ... but this bodge works!
-     */
-    void createUser(String username, String password, String firstName, String lastName, String emailAddress, String caseload, String role) {
-        log.info("Creating user ${username} for caseload ${caseload} with role ${role}")
-        sql.execute """\
-            DECLARE
-               caseloads web_user_pkg.caseloadType;
-               roles web_user_pkg.roleType;
-            BEGIN
-               caseloads(1) := ${caseload};
-               roles(1) := ${role};
-               web_user_pkg.create_elite2_web_user(${username},${password}, ${firstName}, ${lastName}, ${emailAddress}, caseloads, roles);
-            END;"""
+        log.info "Configuring GRANTs for ${username}"
+
+        sql.execute "ALTER USER ${username} GRANT CONNECT THROUGH API_PROXY_USER".toString()
+        sql.execute "GRANT CREATE SESSION TO ${username}".toString()
+        sql.execute "GRANT TAG_USER TO  ${username}".toString()
+        sql.execute "ALTER USER ${username} DEFAULT ROLE TAG_USER".toString()
+        sql.execute "ALTER USER ${username} PROFILE TAG_GENERAL".toString()
+        sql.execute "GRANT CREATE SESSION TO  ${username}".toString()
+        sql.execute "GRANT TAG_USER TO  ${username}".toString()
+        sql.execute "GRANT TAG_RO TO  ${username}".toString()
+        sql.execute "GRANT CONNECT TO  ${username}".toString()
+        sql.execute "ALTER USER ${username} DEFAULT ROLE TAG_RO".toString()
     }
 
     boolean userExists(String username) {
         sqlHelper.exists"SELECT count(*) FROM DBA_USERS where USERNAME = ${username}"
     }
 
-    void deleteUser(String username) {
-        log.info("Deleting user ${username}")
-        sql.execute "DELETE FROM USER_CASELOAD_ROLES where USERNAME = ${username}"
-        sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
-        sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
-        def staffIds = sql.rows("SELECT STAFF_ID FROM STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}").collect{ it.STAFF_ID }
-        sql.execute "DELETE FROM STAFF_USER_ACCOUNTS where USERNAME = ${username}"
-        staffIds.forEach { staffId ->
-            sql.execute "DELETE FROM INTERNET_ADDRESSES where OWNER_ID = ${staffId}"
-            sql.execute "DELETE FROM STAFF_MEMBERS where STAFF_ID = ${staffId}"
-        }
-        sql.execute "DROP USER ${username} CASCADE".toString()
+    boolean usernameHasAccount(String username) {
+        sqlHelper.exists "select count(*) from STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}"
     }
 
-    void ensureUser(String username, String password, String firstName, String lastName, String emailAddress, String caseload, String role) {
-        if (userExists(username)) {
-            log.info("User ${username} already exists. Skipping")
+    void ensureStaffAccount(String username, String firstName, String lastName, String emailAddress, String workingCaseloadId) {
+
+        if (usernameHasAccount(username)) {
+            log.info "Found STAFF_USER_ACCOUNTS for ${username}. Skipping."
+            return
         }
-        createUser(username, password, firstName, lastName, emailAddress, caseload, role)
+
+        long staffId = sql.firstRow("SELECT STAFF_ID.NEXTVAL as staffId FROM DUAL").staffId
+
+        log.info "Creating STAFF_MEMBER for staffId ${staffId}"
+
+        sql.execute """\
+            INSERT INTO STAFF_MEMBERS (
+                STAFF_ID, 
+                LAST_NAME, 
+                FIRST_NAME, 
+                BIRTHDATE,
+                UPDATE_ALLOWED_FLAG, 
+                SUSPENDED_FLAG, 
+                AS_OF_DATE,
+                ROLE, 
+                SEX_CODE, 
+                STATUS, 
+                SUSPENSION_DATE, 
+                SUSPENSION_REASON, 
+                FORCE_PASSWORD_CHANGE_FLAG,
+                LAST_PASSWORD_CHANGE_DATE, 
+                LICENSE_CODE, 
+                LICENSE_EXPIRY_DATE, 
+                CREATE_DATETIME,
+                CREATE_USER_ID, 
+                MODIFY_DATETIME, 
+                MODIFY_USER_ID, 
+                TITLE, 
+                NAME_SEQUENCE, 
+                QUEUE_CLUSTER_ID,
+                AUDIT_TIMESTAMP, 
+                AUDIT_USER_ID, 
+                AUDIT_MODULE_NAME, 
+                AUDIT_CLIENT_USER_ID,
+                AUDIT_CLIENT_IP_ADDRESS, 
+                AUDIT_CLIENT_WORKSTATION_NAME, 
+                AUDIT_ADDITIONAL_INFO,
+                FIRST_LOGON_FLAG, 
+                SIGNIFICANT_DATE, 
+                SIGNIFICANT_NAME, 
+                NATIONAL_INSURANCE_NUMBER)
+            VALUES (
+                ${staffId}, 
+                ${lastName.toUpperCase()}, 
+                ${firstName.toUpperCase()},
+                ${SqlHelper.toSqlDate(LocalDate.of(1980, 1, 1))},
+                'Y', 
+                'N',
+                sysdate, 
+                NULL, 
+                'M', 
+                'ACTIVE', 
+                NULL, 
+                'CA', 
+                'N', 
+                NULL, 
+                NULL, 
+                NULL,
+                sysdate, 
+                'SYSCON_ADM', 
+                sysdate, 
+                'OMS_OWNER', 
+                NULL, 
+                NULL, 
+                2,
+                sysdate, 
+                'OMS_OWNER', 
+                'JDBC Thin Client', 
+                'mick', 
+                '10.200.3.14', 
+                'unknown', 
+                NULL, 
+                'N', 
+                NULL,
+                NULL, 
+                NULL)"""
+
+        long internetAddressId = sql.firstRow ("SELECT INTERNET_ADDRESS_ID.NEXTVAL as internetAddressId FROM DUAL").internetAddressId
+
+        log.info "Creating INTERNET_ADDRESSES for staffId ${staffId}"
+
+        sql.execute """\
+          INSERT INTO INTERNET_ADDRESSES (
+              INTERNET_ADDRESS_ID, 
+              OWNER_ID, 
+              OWNER_CLASS, 
+              INTERNET_ADDRESS_CLASS, 
+              INTERNET_ADDRESS)
+        VALUES (
+            ${internetAddressId}, 
+            ${staffId}, 
+            'STF', 
+            'EMAIL', 
+            ${emailAddress})"""
+
+        log.info "Creating STAFF_USER_ACCOUNTS for ${username}, staffId ${staffId}, workingCaseloadid ${workingCaseloadId}"
+        sql.execute """\
+            INSERT INTO STAFF_USER_ACCOUNTS (
+            USERNAME, 
+            STAFF_ID, 
+            STAFF_USER_TYPE, 
+            ID_SOURCE,
+            WORKING_CASELOAD_ID, 
+            CREATE_DATETIME,
+            CREATE_USER_ID, 
+            MODIFY_DATETIME, 
+            MODIFY_USER_ID, 
+            AUDIT_TIMESTAMP,
+            AUDIT_USER_ID, 
+            AUDIT_MODULE_NAME, 
+            AUDIT_CLIENT_USER_ID, 
+            AUDIT_CLIENT_IP_ADDRESS,
+            AUDIT_CLIENT_WORKSTATION_NAME, 
+            AUDIT_ADDITIONAL_INFO)
+        VALUES (
+            ${username},
+            ${staffId},
+            'GENERAL', 
+            'USER',
+            ${workingCaseloadId}, 
+            sysdate, 
+            'SYSCON_ADM', 
+            sysdate, 
+            ${username},
+            sysdate, 
+            ${username}, 
+            'frmweb@weblg01.syscon.ca (TNS V1-V3)', 
+            'skadubur', 
+            '10.200.2.11', 
+            'SVAGGA-E4310', 
+            NULL)"""
+    }
+
+    void ensureUserCaseloadRoles(String username, List<String> caseloadIds) {
+
+        caseloadIds.forEach { caseloadId ->
+            ensureUserAccessibleCaseload(username, caseloadId)
+
+            STANDARD_ROLES.forEach { roleCode -> ensureUserCaseloadRole(username, caseloadId, roleCode)
+            }
+        }
+    }
+
+    void ensureUserAccessibleCaseload(String username, String caseloadId) {
+        if (!userAccessibleCaseloadExists(username, caseloadId)) {
+            log.info "Creating USER_ACCESSIBLE_CASELOADS for ${username}, caseloadId ${caseloadId}"
+
+            sql.execute """\
+                    INSERT INTO USER_ACCESSIBLE_CASELOADS (
+                        CASELOAD_ID, 
+                        USERNAME, 
+                        START_DATE, 
+                        CREATE_DATETIME, 
+                        CREATE_USER_ID, 
+                        MODIFY_DATETIME, 
+                        MODIFY_USER_ID, 
+                        AUDIT_TIMESTAMP, 
+                        AUDIT_USER_ID, 
+                        AUDIT_MODULE_NAME,
+                        AUDIT_CLIENT_USER_ID, 
+                        AUDIT_CLIENT_IP_ADDRESS, 
+                        AUDIT_CLIENT_WORKSTATION_NAME)
+                    VALUES (
+                        ${caseloadId}, 
+                        ${username}, 
+                        sysdate, 
+                        sysdate, 
+                        'SYSCON_ADM', 
+                        NULL, 
+                        NULL, 
+                        sysdate, 
+                        'SYSCON_ADM',
+                        'OUUUSERS',
+                        'JHickinbotham',
+                        '10.200.1.42',
+                        'Sheffield')"""
+        }
+    }
+
+    boolean userAccessibleCaseloadExists(String username, String caseloadId) {
+        sqlHelper.exists "select count(*) from USER_ACCESSIBLE_CASELOADS where CASELOAD_ID = ${caseloadId} AND USERNAME = ${username}"
+    }
+
+    void ensureUserCaseloadRole(String username, String caseloadId, String roleCode) {
+        long roleId = findRoleId(roleCode)
+        if (! userCaseloadRoleExists(username, caseloadId, roleId)) {
+            log.info "Creating USER_CASELOAD_ROLE for ${username}, ${caseloadId}, ${roleCode} (${roleId})"
+            sql.execute """\
+                    INSERT INTO USER_CASELOAD_ROLES (
+                        ROLE_ID, 
+                        USERNAME, 
+                        CASELOAD_ID, 
+                        CREATE_DATETIME, 
+                        CREATE_USER_ID,
+                        MODIFY_DATETIME, 
+                        MODIFY_USER_ID, AUDIT_TIMESTAMP, 
+                        AUDIT_USER_ID, 
+                        AUDIT_MODULE_NAME,
+                        AUDIT_CLIENT_USER_ID, 
+                        AUDIT_CLIENT_IP_ADDRESS, 
+                        AUDIT_CLIENT_WORKSTATION_NAME )
+                    VALUES (
+                        ${roleId}, 
+                        ${username}, 
+                        ${caseloadId}, 
+                        sysdate, 
+                        'SYSCON_ADM', 
+                        NULL, 
+                        NULL,  
+                        sysdate, 
+                        'SYSCON_ADM', 
+                        'OUUUSERS', 
+                        'TRichardson', 
+                        '10.200.3.3', 
+                        'trevlt')"""
+        }
+    }
+
+    boolean userCaseloadRoleExists(String username, String caseloadId, long roleId) {
+        sqlHelper.exists "select count(*) from USER_CASELOAD_ROLES WHERE ROLE_ID = ${roleId} AND USERNAME = ${username} AND CASELOAD_ID = ${caseloadId}"
+    }
+
+    long findRoleId(String roleCode) {
+        sql.firstRow("select ROLE_ID as roleId from OMS_ROLES WHERE ROLE_CODE = ${roleCode}").roleId
+    }
+
+    void deleteWebUser(String username) {
+        log.info("Deleting user ${username}")
+        sql.withTransaction {
+            sql.execute "DELETE FROM USER_CASELOAD_ROLES where USERNAME = ${username}"
+            sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
+            def staffIds = sql.rows("SELECT STAFF_ID FROM STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}").collect {
+                it.STAFF_ID
+            }
+            sql.execute "DELETE FROM STAFF_USER_ACCOUNTS where USERNAME = ${username}"
+            staffIds.forEach { staffId ->
+                log.info "Deleting INTERNET_ADDRESSES and STAFF_MEMBERS for staffId ${staffId}"
+                sql.execute "DELETE FROM INTERNET_ADDRESSES where OWNER_ID = ${staffId}"
+                sql.execute "DELETE FROM STAFF_MEMBERS where STAFF_ID = ${staffId}"
+            }
+            sql.execute "DROP USER ${username} CASCADE".toString()
+        }
     }
 }

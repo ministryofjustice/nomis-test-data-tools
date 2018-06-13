@@ -14,7 +14,7 @@ class DeleteWebUsers extends WebUserActions {
         roles.forEach {
             def username = usernameForRole(it)
             if (webUser.userExists(username)) {
-                webUser.deleteUser(username)
+                webUser.deleteWebUser(username)
             } else {
                 log.info("User ${username} not found. Skipping.")
             }

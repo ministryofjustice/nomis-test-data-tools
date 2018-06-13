@@ -7,53 +7,56 @@ class WebUserSpec extends Specification {
 
     private WebUser ws
     private Prisons p
-    private SqlHelper sqlHelper
 
     def setup() {
         Sql sql = Database.instance().sql()
         ws = new WebUser(sql)
         p = new Prisons(sql)
-        sqlHelper = new SqlHelper(sql)
-    }
-
-    def 'install package'() {
-
-        when:
-        ws.installPackage()
-
-        then:
-        true
     }
 
 //    @spock.lang.Ignore
-    def 'create and delete user'() {
+    def 'create and delete web user'() {
         given:
-        def agency = 'TST1'
-        def username = 'LICENCE_RO_' + agency
+        final agency = 'TST1'
+        final username = agency+'_LICENCE_RO'
 
         p.ensureAgencyAndCaseload(agency, "Testing")
 
         when:
 
-        ws.createUser(
+        ws.ensureWebUser(
             username,
             'password123456',
             'RO',
             username,
             'test.user@digital.justice.gov.uk',
-            agency,
+            [agency],
             'LICENCE_RO')
+
         then:
         ws.userExists username
+        ws.usernameHasAccount username
+        ws.userAccessibleCaseloadExists username, agency
+        ws.userCaseloadRoleExists username, 'NWEB', ws.findRoleId('LICENCE_RO')
+        ws.userCaseloadRoleExists username, agency, 100
+        ws.userCaseloadRoleExists username, agency, 202
+        ws.userCaseloadRoleExists username, agency, 962
 
         when:
-        ws.deleteUser username
+        ws.deleteWebUser username
 
         then:
         ! ws.userExists(username)
+        ! ws.usernameHasAccount (username)
+        ! ws.userAccessibleCaseloadExists (username, agency)
+        ! ws.userCaseloadRoleExists (username, 'NWEB', ws.findRoleId('LICENCE_RO'))
+        ! ws.userCaseloadRoleExists (username, agency, 100)
+        ! ws.userCaseloadRoleExists (username, agency, 202)
+        ! ws.userCaseloadRoleExists (username, agency, 962)
+
 
         cleanup:
-        p.deleteAgencyAndCaseload(agency)
+        p.deleteAgencyAndCaseload agency
     }
 }
 

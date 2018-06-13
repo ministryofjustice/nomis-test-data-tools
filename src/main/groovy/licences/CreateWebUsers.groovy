@@ -12,7 +12,7 @@ class CreateWebUsers extends WebUserActions {
     @Override
     void run() {
         roles.forEach{
-            webUser.ensureUser(usernameForRole(it), PASSWORD, it, it, "${it}@${EMAIL_DOMAIN}", AGENCY, it)
+            webUser.ensureWebUser(usernameForRole(it), PASSWORD, it, it, "${it}@${EMAIL_DOMAIN}", [AGENCY], it)
         }
     }
 }
