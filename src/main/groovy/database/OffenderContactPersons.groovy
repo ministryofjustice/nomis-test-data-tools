@@ -45,7 +45,7 @@ class OffenderContactPersons {
             VALUES (
                 ${personId},  
                 NVL((SELECT MAX(ID_SEQ) FROM PERSON_IDENTIFIERS WHERE PERSON_ID = ${personId}),0) + 1,
-                'EXTERNAL_REF', 
+                'EXTERNAL_REL', 
                 ${personIdentifier})"""
     }
 
@@ -93,7 +93,7 @@ class OffenderContactPersons {
             SELECT count(*) 
               FROM PERSON_IDENTIFIERS 
              WHERE IDENTIFIER = ${personIdentifier} AND
-                   IDENTIFIER_TYPE = 'EXTERNAL_REF' """
+                   IDENTIFIER_TYPE = 'EXTERNAL_REL' """
     }
 
     long personIdFromPersonIdentifier(String personIdentifier) {
@@ -101,7 +101,7 @@ class OffenderContactPersons {
               SELECT PERSON_ID as personId
                 FROM PERSON_IDENTIFIERS 
                WHERE IDENTIFIER = ${personIdentifier} AND
-                     IDENTIFIER_TYPE = 'EXTERNAL_REF'
+                     IDENTIFIER_TYPE = 'EXTERNAL_REL'
             ORDER BY ID_SEQ DESC
             """).personId
     }
