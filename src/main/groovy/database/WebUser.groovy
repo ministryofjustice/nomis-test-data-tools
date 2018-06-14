@@ -7,7 +7,7 @@ import java.time.LocalDate
 
 @Slf4j
 class WebUser {
-    private static final  List<String> STANDARD_ROLES = ['100', '202', '962']
+    private static final List<String> STANDARD_ROLES = ['100', '202', '962']
 
     private static final String WEB_USER_CASELOAD = 'NWEB'
 
@@ -30,18 +30,16 @@ class WebUser {
      * @param roleCode The role to be assigned to the user.
      */
     void ensureWebUser(String username, String password, String firstName, String lastName, String emailAddress, List<String> caseloadIds, String roleCode) {
-        sql.withTransaction {
-            ensureOracleUser(username, password)
-            ensureStaffAccount(username, firstName, lastName, emailAddress, caseloadIds[0])
-            ensureUserCaseloadRoles(username, caseloadIds)
-            ensureUserAccessibleCaseload(username, WEB_USER_CASELOAD)
-            ensureUserCaseloadRole(username, WEB_USER_CASELOAD, roleCode)
-        }
+        ensureOracleUser(username, password)
+        ensureStaffAccount(username, firstName, lastName, emailAddress, caseloadIds[0])
+        ensureUserCaseloadRoles(username, caseloadIds)
+        ensureUserAccessibleCaseload(username, WEB_USER_CASELOAD)
+        ensureUserCaseloadRole(username, WEB_USER_CASELOAD, roleCode)
     }
 
 
     void ensureOracleUser(String username, String password) {
-        if (! userExists(username)) {
+        if (!userExists(username)) {
             log.info "Create User ${username}"
             sql.execute "CREATE USER ${username} IDENTIFIED BY ${password}".toString()
         }
@@ -61,7 +59,7 @@ class WebUser {
     }
 
     boolean userExists(String username) {
-        sqlHelper.exists"SELECT count(*) FROM DBA_USERS where USERNAME = ${username}"
+        sqlHelper.exists "SELECT count(*) FROM DBA_USERS where USERNAME = ${username}"
     }
 
     boolean usernameHasAccount(String username) {
@@ -71,7 +69,8 @@ class WebUser {
     void ensureStaffAccount(String username, String firstName, String lastName, String emailAddress, String workingCaseloadId) {
 
         if (usernameHasAccount(username)) {
-            log.info "Found STAFF_USER_ACCOUNTS for ${username}. Skipping."
+            log.info "Found STAFF_USER_ACCOUNTS for ${username}. Reassigning workingCaseload to ${workingCaseloadId}."
+            sql.execute "UPDATE STAFF_USER_ACCOUNTS SET WORKING_CASELOAD_ID = ${workingCaseloadId} WHERE USERNAME = ${username}"
             return
         }
 
@@ -151,7 +150,7 @@ class WebUser {
                 NULL, 
                 NULL)"""
 
-        long internetAddressId = sql.firstRow ("SELECT INTERNET_ADDRESS_ID.NEXTVAL as internetAddressId FROM DUAL").internetAddressId
+        long internetAddressId = sql.firstRow("SELECT INTERNET_ADDRESS_ID.NEXTVAL as internetAddressId FROM DUAL").internetAddressId
 
         log.info "Creating INTERNET_ADDRESSES for staffId ${staffId}"
 
@@ -259,7 +258,7 @@ class WebUser {
 
     void ensureUserCaseloadRole(String username, String caseloadId, String roleCode) {
         long roleId = findRoleId(roleCode)
-        if (! userCaseloadRoleExists(username, caseloadId, roleId)) {
+        if (!userCaseloadRoleExists(username, caseloadId, roleId)) {
             log.info "Creating USER_CASELOAD_ROLE for ${username}, ${caseloadId}, ${roleCode} (${roleId})"
             sql.execute """\
                     INSERT INTO USER_CASELOAD_ROLES (
@@ -302,23 +301,23 @@ class WebUser {
 
     void deleteWebUser(String username) {
         log.info("Deleting user ${username}")
-//        sql.withTransaction {
-            sql.execute "DELETE FROM USER_CASELOAD_ROLES where USERNAME = ${username}"
-            sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
-            def staffIds = sql.rows("SELECT STAFF_ID FROM STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}").collect {
-                it.STAFF_ID
-            }
-            sql.execute "DELETE FROM STAFF_USER_ACCOUNTS where USERNAME = ${username}"
-            staffIds.forEach { staffId ->
-                log.info "Deleting INTERNET_ADDRESSES and STAFF_MEMBERS for staffId ${staffId}"
-                sql.execute "DELETE FROM INTERNET_ADDRESSES where OWNER_ID = ${staffId}"
-                sql.execute "DELETE FROM STAFF_MEMBERS where STAFF_ID = ${staffId}"
-            }
-            if (sqlHelper.exists("SELECT COUNT(*) from DBA_USERS where USERNAME = ${username}")) {
-                sql.execute "DROP USER ${username} CASCADE".toString()
-            } else {
-                log.info "The Oracle user ${username} wasn't found."
-            }
-//        }
+        sql.execute "DELETE FROM USER_CASELOAD_ROLES where USERNAME = ${username}"
+        sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
+        def staffIds = sql.rows("SELECT STAFF_ID FROM STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}").collect {
+            it.STAFF_ID
+        }
+        sql.execute "DELETE FROM STAFF_USER_ACCOUNTS where USERNAME = ${username}"
+        staffIds.forEach { staffId ->
+            log.info "Deleting from STAFF_LOCATION_ROLES for staffId ${staffId}"
+            sql.execute "DELETE FROM STAFF_LOCATION_ROLES where SAC_STAFF_ID = ${staffId}"
+            log.info "Deleting INTERNET_ADDRESSES and STAFF_MEMBERS for staffId ${staffId}"
+            sql.execute "DELETE FROM INTERNET_ADDRESSES where OWNER_ID = ${staffId}"
+            sql.execute "DELETE FROM STAFF_MEMBERS where STAFF_ID = ${staffId}"
+        }
+        if (sqlHelper.exists("SELECT COUNT(*) from DBA_USERS where USERNAME = ${username}")) {
+            sql.execute "DROP USER ${username} CASCADE".toString()
+        } else {
+            log.info "The Oracle user ${username} wasn't found."
+        }
     }
 }

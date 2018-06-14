@@ -11,8 +11,10 @@ class CreateWebUsers extends WebUserActions {
 
     @Override
     void run() {
-        roles.forEach{
-            webUser.ensureWebUser(usernameForRole(it), PASSWORD, it, it, "${it}@${EMAIL_DOMAIN}", [AGENCY], it)
+        sql.withTransaction {
+            webUserRequirements.forEach { req ->
+                webUser.ensureWebUser(req.username, PASSWORD, req.username, req.username, "${req.username}@${EMAIL_DOMAIN}", [req.caseload], req.roleCode)
+            }
         }
     }
 }

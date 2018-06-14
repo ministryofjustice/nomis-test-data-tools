@@ -26,7 +26,9 @@ class TearDownRequirements extends DatabaseActions {
             Set<DeliusLink> linkSet = requirements.collect { it.deliusLink } as Set
             linkSet.forEach {
                 offenderContactPersons.deletePerson it.deliusUsername
-                webUser.deleteWebUser it.nomisUsername
+                // Next line commented out because we're re-using existing nomisUsernames (DELIUS_ID, DELIUS_USER2 etc)
+                // Not sure this is a good idea.
+                //  webUser.deleteWebUser it.nomisUsername
             }
 
             requirements.forEach {

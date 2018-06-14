@@ -11,12 +11,13 @@ class DeleteWebUsers extends WebUserActions {
 
     @Override
     void run() {
-        roles.forEach {
-            def username = usernameForRole(it)
-            if (webUser.userExists(username)) {
-                webUser.deleteWebUser(username)
-            } else {
-                log.info("User ${username} not found. Skipping.")
+        sql.withTransaction {
+            webUserRequirements.forEach { req ->
+                if (webUser.userExists(req.username)) {
+                    webUser.deleteWebUser req.username
+                } else {
+                    log.info "User ${req.username} Not Found."
+                }
             }
         }
     }
