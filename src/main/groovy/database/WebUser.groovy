@@ -169,7 +169,7 @@ class WebUser {
             'EMAIL', 
             ${emailAddress})"""
 
-        log.info "Creating STAFF_USER_ACCOUNTS for ${username}, staffId ${staffId}, workingCaseloadid ${workingCaseloadId}"
+        log.info "Creating STAFF_USER_ACCOUNTS for ${username}, staffId ${staffId}, workingCaseloadId ${workingCaseloadId}"
         sql.execute """\
             INSERT INTO STAFF_USER_ACCOUNTS (
             USERNAME, 
@@ -302,7 +302,7 @@ class WebUser {
 
     void deleteWebUser(String username) {
         log.info("Deleting user ${username}")
-        sql.withTransaction {
+//        sql.withTransaction {
             sql.execute "DELETE FROM USER_CASELOAD_ROLES where USERNAME = ${username}"
             sql.execute "DELETE FROM USER_ACCESSIBLE_CASELOADS where USERNAME = ${username}"
             def staffIds = sql.rows("SELECT STAFF_ID FROM STAFF_USER_ACCOUNTS WHERE USERNAME = ${username}").collect {
@@ -314,7 +314,11 @@ class WebUser {
                 sql.execute "DELETE FROM INTERNET_ADDRESSES where OWNER_ID = ${staffId}"
                 sql.execute "DELETE FROM STAFF_MEMBERS where STAFF_ID = ${staffId}"
             }
-            sql.execute "DROP USER ${username} CASCADE".toString()
-        }
+            if (sqlHelper.exists("SELECT COUNT(*) from DBA_USERS where USERNAME = ${username}")) {
+                sql.execute "DROP USER ${username} CASCADE".toString()
+            } else {
+                log.info "The Oracle user ${username} wasn't found."
+            }
+//        }
     }
 }

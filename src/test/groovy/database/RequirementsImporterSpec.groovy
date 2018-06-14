@@ -10,7 +10,8 @@ class RequirementsImporterSpec extends Specification {
 
     def 'convert String to LocalDate'() {
         expect:
-        fromLongDateString('01/01/1995') == LocalDate.of(1995, 1, 1)
+        fromDateString('01/01/1995') == LocalDate.of(1995, 1, 1)
+        fromDateString('01/01/95')   == LocalDate.of(2095, 1, 1)
     }
 
     def 'The importer reads the spec'() {
@@ -47,18 +48,24 @@ class RequirementsImporterSpec extends Specification {
             aliasName       == 'Steam'
             agency          == 'LT3'
             cell            == 'LT3-A-1-003'
-            sentenceStart   == LocalDate.of(2018,1, 31)
-            initialHdced    == LocalDate.of(2018,10,30)
+            sentenceStart   == LocalDate.of(2018, 1, 31)
+            initialHdced    == LocalDate.of(2018,10, 30)
             initialCrd      == LocalDate.of(2019, 1, 30)
             initialLed      == LocalDate.of(2020, 1, 25)
             initialSed      == LocalDate.of(2020, 1, 25)
             initialTused    == null
             decisionInNomis == 'No'
+            with(deliusLink) {
+                firstName      == 'Jessy'
+                lastName       == 'Smith'
+                deliusUsername == 'DELIUS_ID'
+                nomisUsername  == 'RO_USER'
+            }
         }
 
         with(requirements[1]) {
-            overridedHdced == LocalDate.of(2019, 8, 29)
-            overridedCrd   == LocalDate.of(2020, 1, 10)
+            overridedHdced == LocalDate.of(2019,  8, 29)
+            overridedCrd   == LocalDate.of(2020,  1, 10)
             overridedLed   == LocalDate.of(2021, 12, 25)
             overridedSed   == LocalDate.of(2021, 12, 25)
         }
@@ -77,6 +84,6 @@ class RequirementsImporterSpec extends Specification {
     }
 
     private static Reader reader() {
-        TestRequirements.requirementsReader()
+        TestRequirements.reader()
     }
 }

@@ -59,31 +59,38 @@ class RequirementsImporter {
 
     private static List<Requirement> fromLines(List<Map<String, String>> lines) {
         lines.collect {line -> new Requirement(
-                nomisId:       line[NOMIS_ID],
-                firstName:     line[FIRST_NAME],
-                lastName:      line[LAST_NAME],
-                dateOfBirth:   fromDateString(line[DATE_OF_BIRTH]),
-                aliasName:     line[ALIAS_NAME],
-                agency:        line[AGENCY],
-                cell:          line[CELL],
-                sentenceStart: fromDateString(line[SENTENCE_START]),
+                nomisId:           line[NOMIS_ID],
+                firstName:         line[FIRST_NAME],
+                lastName:          line[LAST_NAME],
+                dateOfBirth:       fromDateString(line[DATE_OF_BIRTH]),
+                aliasName:         line[ALIAS_NAME],
+                agency:            line[AGENCY],
+                cell:              line[CELL],
+                sentenceStart:     fromDateString(line[SENTENCE_START]),
 
-                initialHdced:  fromDateString(line[INITIAL_HDCED]),
-                initialCrd:    fromDateString(line[INITIAL_CRD_ARD]),
-                initialLed:    fromDateString(line[INITIAL_LED]),
-                initialSed:    fromDateString(line[INITIAL_SED]),
-                initialTused:  fromDateString(line[INITIAL_TUSED]),
+                initialHdced:      fromDateString(line[INITIAL_HDCED]),
+                initialCrd:        fromDateString(line[INITIAL_CRD_ARD]),
+                initialLed:        fromDateString(line[INITIAL_LED]),
+                initialSed:        fromDateString(line[INITIAL_SED]),
+                initialTused:      fromDateString(line[INITIAL_TUSED]),
 
-                overridedHdced:  fromDateString(line[EFFECTIVE_HDCED]),
-                overridedCrd:    fromDateString(line[EFFECTIVE_ARD_CRD]),
-                overridedLed:    fromDateString(line[EFFECTIVE_LED]),
-                overridedSed:    fromDateString(line[EFFECTIVE_SED]),
-                overridedTused:  fromDateString(line[EFFECTIVE_TUSED]),
-                decisionInNomis: line[DECISION_IN_NOMIS]
+                overridedHdced:    fromDateString(line[EFFECTIVE_HDCED]),
+                overridedCrd:      fromDateString(line[EFFECTIVE_ARD_CRD]),
+                overridedLed:      fromDateString(line[EFFECTIVE_LED]),
+                overridedSed:      fromDateString(line[EFFECTIVE_SED]),
+                overridedTused:    fromDateString(line[EFFECTIVE_TUSED]),
+                decisionInNomis:   line[DECISION_IN_NOMIS],
+
+                deliusLink: new DeliusLink(
+                    firstName:      line[RO_FIRST_NAME],
+                    lastName:       line[RO_LAST_NAME],
+                    deliusUsername: line[DELIUS_USERNAME],
+                    nomisUsername:  line[DELIUS_NOMIS_STAFF_ID]
+                )
         ) }
     }
 
-    private static fromDateString(String dateString) {
+    static fromDateString(String dateString) {
         try {
             return fromLongDateString(dateString)
         } catch(DateTimeParseException e) {

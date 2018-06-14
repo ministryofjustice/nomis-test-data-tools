@@ -1,5 +1,6 @@
 package licences
 
+import database.DeliusLink
 import database.Requirement
 import database.TestRequirements
 import groovy.util.logging.Slf4j
@@ -7,7 +8,7 @@ import groovy.util.logging.Slf4j
 import static database.RequirementsImporter.read
 
 @Slf4j
-class TearDownRequirements extends  DatabaseActions {
+class TearDownRequirements extends DatabaseActions {
 
     private static String AGENCY = 'LT3'
 
@@ -15,11 +16,28 @@ class TearDownRequirements extends  DatabaseActions {
         new TearDownRequirements().run()
     }
 
-    static Reader requirementsReader() {
-        return TestRequirements.requirementsReader()
+    void run() {
+        sql.withTransaction {
+
+            tearDownAgency AGENCY
+
+            List<Requirement> requirements = read requirementsReader()
+
+            Set<DeliusLink> linkSet = requirements.collect { it.deliusLink } as Set
+            linkSet.forEach {
+                offenderContactPersons.deletePerson it.deliusUsername
+                webUser.deleteWebUser it.nomisUsername
+            }
+
+            requirements.forEach {
+                offenders.delete it.nomisId
+            }
+//            throw new Exception() // Don't tear down.  Roll back the transaction instead.
+        }
     }
 
     void tearDownAgency(String agencyId) {
+        offenderContactPersons.tearDownContactPersons agencyId
         offenderCurfews.tearDown agencyId
         sentenceTerms.tearDown agencyId
         offenderSentCalculations.tearDown agencyId
@@ -27,16 +45,7 @@ class TearDownRequirements extends  DatabaseActions {
         internalLocations.tearDown agencyId
     }
 
-    void run() {
-        sql.withTransaction {
-            tearDownAgency AGENCY
-
-            List<Requirement> requirements = read requirementsReader()
-
-            requirements.forEach {
-                offenders.delete it.nomisId
-            }
-//            throw new Exception() // Don't tear down.  Roll back the transaction instead.
-        }
+    static Reader requirementsReader() {
+        return TestRequirements.reader()
     }
 }

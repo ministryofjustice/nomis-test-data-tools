@@ -1,5 +1,6 @@
 package licences
 
+import database.DeliusLink
 import database.Requirement
 import database.TestRequirements
 import groovy.util.logging.Slf4j
@@ -20,15 +21,17 @@ class SetUpRequirements extends DatabaseActions {
     void run() {
         ensurePrisons()
 
+        List<Requirement> requirements = read requirementsReader()
+
         ensureInternalLocations AGENCY
 
-        List<Requirement> requirements = read requirementsReader()
+        ensureContactPersons requirements.collect{ it.deliusLink }
 
         applyRequirements requirements
     }
 
     static Reader requirementsReader() {
-        TestRequirements.requirementsReader()
+        TestRequirements.reader()
     }
 
     void ensurePrisons() {
@@ -60,15 +63,15 @@ class SetUpRequirements extends DatabaseActions {
     }
 
     void applyRequirements(List<Requirement> requirements) {
-        requirements.forEach { implementRequirement it }
+        requirements.forEach { applyRequirement it }
     }
 
-    void implementRequirement(Requirement requirement) {
+    void applyRequirement(Requirement requirement) {
         sql.withTransaction {
             requirement.with {
                 if (offenders.exists(nomisId)) {
                     log.warn("Found OFFENDER records for ${nomisId}. Skipping this requirement.")
-                    return;
+                    return
                 }
                 offenders.create(nomisId, firstName, lastName, dateOfBirth)
 
@@ -109,8 +112,28 @@ class SetUpRequirements extends DatabaseActions {
                 def effectiveDate = overridedHdced ?: initialHdced ?: LocalDate.now()
                 def ardCrdDate = (overridedCrd ?: initialCrd) ?: (overridedArd ?: initialArd)
 
-               offenderCurfews.create(bookingId, effectiveDate, null, ardCrdDate, approvalStatus)
+                offenderCurfews.create(bookingId, effectiveDate, null, ardCrdDate, approvalStatus)
+
+                offenderContactPersons.createOffenderContact(bookingId, deliusLink.deliusUsername)
             }
         }
+    }
+
+    void ensureContactPersons(List<DeliusLink> links) {
+
+        Set<DeliusLink> linkSet = links as Set
+        log.info "Ensuring contact person for Delius links: ${linkSet}"
+        linkSet.forEach { link -> link.with {
+            offenderContactPersons.createPerson(firstName, lastName, deliusUsername)
+            webUser.ensureWebUser(
+                    nomisUsername,
+                    'password123456',
+                    firstName,
+                    lastName,
+                    lastName + '@digital.justice.gov.uk',
+                    [AGENCY],
+                    'LICENCE_RO'
+            )
+        }}
     }
 }

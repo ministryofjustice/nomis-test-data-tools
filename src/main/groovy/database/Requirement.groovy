@@ -38,6 +38,8 @@ class Requirement {
 
     String decisionInNomis
 
+    DeliusLink deliusLink
+
     String getAliasFirstName() {
         if (!aliasName) return null
         def parts = ALIAS_SPLIT_PATTERN.split(aliasName)
