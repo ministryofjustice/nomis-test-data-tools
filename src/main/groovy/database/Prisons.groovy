@@ -2,7 +2,8 @@ package database
 
 import groovy.sql.Sql
 import groovy.util.logging.Slf4j
-import static database.SqlHelper.*
+
+import static database.SqlHelper.flag
 
 @Slf4j
 class Prisons {
@@ -47,7 +48,7 @@ class Prisons {
 
     void createAgencyAndCaseload(String id, String description) {
         createAgencyLocation(id, description, 'INST', true)
-        createCaseload(id, description, 'INST', 1, false, true, true, 'DUMMY')
+        createCaseload(id, description, 'INST', 500, true, true, true, 'GENERAL')
         createCaseloadAgencyLocation(id, id)
     }
 
@@ -98,7 +99,7 @@ class Prisons {
 
     void ensureAgencyAndCaseload(String id, String description) {
         ensureAgencyLocation(id, description, 'INST', true)
-        ensureCaseload(id, description, 'INST', 1, false, true, true, 'DUMMY')
+        ensureCaseload(id, description, 'INST', 500, true, false, true, 'GENERAL')
         ensureCaseloadAgencyLocation(id, id)
     }
 }

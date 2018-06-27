@@ -30,7 +30,7 @@ class WebUser {
      * @param roleCode The role to be assigned to the user.
      */
     void ensureWebUser(String username, String password, String firstName, String lastName, String emailAddress, List<String> caseloadIds, String roleCode) {
-        ensureOracleUser(username, password)
+       // ensureOracleUser(username, password)  // dont do this!
         ensureStaffAccount(username, firstName, lastName, emailAddress, caseloadIds[0])
         ensureUserCaseloadRoles(username, caseloadIds)
         ensureUserAccessibleCaseload(username, WEB_USER_CASELOAD)
